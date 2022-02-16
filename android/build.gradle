@@ -33,3 +33,7 @@ android {
         minSdkVersion 16
     }
 }
+
+dependencies {
+    implementation 'androidx.localbroadcastmanager:localbroadcastmanager:1.0.0'
+}
