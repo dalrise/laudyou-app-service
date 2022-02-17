@@ -1,27 +1,38 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-  package="com.dalrise.laudyou.laudyou_app_service">
+    xmlns:tools="http://schemas.android.com/tools"
+    package="com.dalrise.laudyou.laudyou_app_service"
+    tools:ignore="CoarseFineLocation">
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
-    <service
-        android:enabled="true"
-        android:exported="true"
-        android:name=".BackgroundService"
-        />
+    <!--사용량 관리-->
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions" />
 
-    <receiver
-        android:name=".WatchdogReceiver"
-        android:enabled="true"
-        android:exported="true"
-        />
+    <!--다른앱 실행 권한-->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
 
-    <receiver android:name=".BootReceiver"
-        android:enabled="true"
-        android:exported="true">
+    <application>
+        <service
+            android:enabled="true"
+            android:exported="true"
+            android:name=".BackgroundService"
+            />
 
-        <intent-filter>
-            <action android:name="android.intent.action.BOOT_COMPLETED"/>
-        </intent-filter>
-    </receiver>
+        <receiver
+            android:name=".WatchdogReceiver"
+            android:enabled="true"
+            android:exported="true"
+            />
+
+        <receiver android:name=".BootReceiver"
+            android:enabled="true"
+            android:exported="true">
+
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+            </intent-filter>
+        </receiver>
+    </application>
 </manifest>
