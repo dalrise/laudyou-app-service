@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/services.dart';
+import 'package:laudyou_app_service/utils/commons.dart';
 
 class IosConfiguration {
   /// 이 메소드는 앱이 포그라운드에 있을 때 실행됩니다.
@@ -45,6 +46,8 @@ class AndroidConfiguration {
     this.foregroundServiceNotificationTitle,
   });
 }
+
+enum SystemWindowPrefMode { DEFAULT, OVERLAY, BUBBLE }
 
 class LaudyouAppService {
   bool _isFromInitialization = false;
@@ -221,5 +224,17 @@ class LaudyouAppService {
     final String? version = await _mainChannel
         .invokeMethod('getPlatformVersion', {"a": 1, "b": "json 데이타 전달"});
     return version;
+  }
+
+  static Future<bool?> checkPermissions(
+      {SystemWindowPrefMode prefMode = SystemWindowPrefMode.DEFAULT}) async {
+    return await _mainChannel.invokeMethod('checkPermissions',
+        {"prefMode": Commons.getSystemWindowPrefMode(prefMode)});
+  }
+
+  static Future<bool?> requestPermissions(
+      {SystemWindowPrefMode prefMode = SystemWindowPrefMode.DEFAULT}) async {
+    return await _mainChannel.invokeMethod('requestPermissions',
+        {"prefMode": Commons.getSystemWindowPrefMode(prefMode)});
   }
 }

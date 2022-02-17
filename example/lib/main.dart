@@ -160,6 +160,20 @@ class _MyAppState extends State<MyApp> {
                 },
               ),
               ElevatedButton(
+                child: const Text("Check Permission"),
+                onPressed: () async {
+                  final result = await LaudyouAppService.checkPermissions();
+                  print(result);
+                },
+              ),
+              ElevatedButton(
+                child: const Text("Request Permission"),
+                onPressed: () async {
+                  final result = await LaudyouAppService.requestPermissions();
+                  print(result);
+                },
+              ),
+              ElevatedButton(
                 child: const Text("Foreground Mode"),
                 onPressed: () {
                   LaudyouAppService().sendData({"action": "setAsForeground"});
