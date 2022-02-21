@@ -1,14 +1,14 @@
 package com.dalrise.laudyou.laudyou_app_service;
 
-import static android.content.Context.MODE_PRIVATE;
+import static com.dalrise.laudyou.laudyou_app_service.utils.Constants.CHANNEL;
+import static com.dalrise.laudyou.laudyou_app_service.utils.Constants.INTENT_EXTRA_PARAMS_MAP;
 
+import android.annotation.TargetApi;
 import android.app.Activity;
-import android.app.ActivityManager;
-import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.SharedPreferences;
+import android.graphics.drawable.Icon;
 import android.net.Uri;
 import android.os.Build;
 import android.provider.Settings;
@@ -20,68 +20,297 @@ import androidx.annotation.RequiresApi;
 import androidx.core.content.ContextCompat;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
+import com.dalrise.laudyou.laudyou_app_service.services.WindowServiceNew;
 import com.dalrise.laudyou.laudyou_app_service.utils.Commons;
+import com.dalrise.laudyou.laudyou_app_service.utils.NotificationHelper;
+import com.google.gson.Gson;
 
-import org.json.JSONException;
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
-
+import java.util.concurrent.atomic.AtomicBoolean;
+import io.flutter.FlutterInjector;
+import io.flutter.embedding.engine.FlutterEngine;
+import io.flutter.embedding.engine.FlutterEngineCache;
+import io.flutter.embedding.engine.dart.DartExecutor;
 import io.flutter.embedding.engine.plugins.FlutterPlugin;
+import io.flutter.embedding.engine.plugins.activity.ActivityAware;
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding;
-import io.flutter.embedding.engine.plugins.service.ServiceAware;
 import io.flutter.embedding.engine.plugins.service.ServicePluginBinding;
+import io.flutter.plugin.common.JSONMethodCodec;
 import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel;
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler;
 import io.flutter.plugin.common.MethodChannel.Result;
 import io.flutter.plugin.common.PluginRegistry.Registrar;
-import io.flutter.plugin.common.JSONMethodCodec;
+import io.flutter.view.FlutterCallbackInformation;
 
 /** LaudyouAppServicePlugin */
-public class LaudyouAppServicePlugin extends BroadcastReceiver implements FlutterPlugin, MethodCallHandler, ServiceAware {
+public class LaudyouAppServicePlugin extends Activity implements FlutterPlugin, ActivityAware, MethodCallHandler {
 
+  private static final List<LaudyouBackgroundServicePlugin> _instances = new ArrayList<>();
 
-
-  private static final String TAG = "BackgroundServicePlugin";
-  private static final List<LaudyouAppServicePlugin> _instances = new ArrayList<>();
-  public int ACTION_MANAGE_OVERLAY_PERMISSION_REQUEST_CODE = 1237;
-
-  public LaudyouAppServicePlugin(){
-    _instances.add(this);
-  }
-
-  private LaudyouAppServicePlugin(Context context, Activity activity) {
-    this.context = context;
-    mActivity = activity;
-  }
-
-  private MethodChannel channel;
-  private Context context;
+  private final String flutterEngineId = "system_alert_window_engine";
+  private Context mContext;
   private Activity mActivity;
-  private BackgroundService service;
+  public AtomicBoolean sIsIsolateRunning = new AtomicBoolean(false);
+
+  private MethodChannel methodChannel;
+  private MethodChannel backgroundChannel;
+  public int ACTION_MANAGE_OVERLAY_PERMISSION_REQUEST_CODE = 1237;
+  private final String TAG = "SystemAlertWindowPlugin";
+
+
+  public LaudyouAppServicePlugin() {
+    _instances.add(new LaudyouBackgroundServicePlugin());
+  }
+
+  private LaudyouAppServicePlugin(Context context, Activity activity, MethodChannel newMethodChannel) {
+    this.mContext = context;
+    mActivity = activity;
+    methodChannel = newMethodChannel;
+    methodChannel.setMethodCallHandler(this);
+  }
+
+  public synchronized FlutterEngine getFlutterEngine(Context context) {
+    FlutterEngine flutterEngine = FlutterEngineCache.getInstance().get(flutterEngineId);
+    if (flutterEngine == null) {
+      // XXX: The constructor triggers onAttachedToEngine so this variable doesn't help us.
+      // Maybe need a boolean flag to tell us we're currently loading the main flutter engine.
+      flutterEngine = new FlutterEngine(context.getApplicationContext());
+      flutterEngine.getDartExecutor().executeDartEntrypoint(DartExecutor.DartEntrypoint.createDefault());
+      FlutterEngineCache.getInstance().put(flutterEngineId, flutterEngine);
+    }
+    return flutterEngine;
+  }
+
+  public void disposeFlutterEngine() {
+    FlutterEngine flutterEngine = FlutterEngineCache.getInstance().get(flutterEngineId);
+    if (flutterEngine != null) {
+      flutterEngine.destroy();
+      FlutterEngineCache.getInstance().remove(flutterEngineId);
+    }
+  }
+
+  @SuppressWarnings("unused")
+  public static void registerWith(Registrar registrar) {
+    final MethodChannel channel = new MethodChannel(registrar.messenger(), CHANNEL, JSONMethodCodec.INSTANCE);
+    channel.setMethodCallHandler(new LaudyouAppServicePlugin(registrar.context(), registrar.activity(), channel));
+  }
 
   @Override
   public void onAttachedToEngine(@NonNull FlutterPluginBinding flutterPluginBinding) {
-    this.context = flutterPluginBinding.getApplicationContext();
-    LocalBroadcastManager localBroadcastManager = LocalBroadcastManager.getInstance(this.context);
-    localBroadcastManager.registerReceiver(this, new IntentFilter("id.flutter/background_service"));
-
-    channel = new MethodChannel(flutterPluginBinding.getBinaryMessenger(), "id.flutter/background_service", JSONMethodCodec.INSTANCE);
-    channel.setMethodCallHandler(this);
+    this.mContext = flutterPluginBinding.getApplicationContext();
+    this.methodChannel = new MethodChannel(flutterPluginBinding.getBinaryMessenger(), CHANNEL, JSONMethodCodec.INSTANCE);
+    this.methodChannel.setMethodCallHandler(this);
   }
 
-  public static void registerWith(Registrar registrar) {
-    LocalBroadcastManager localBroadcastManager = LocalBroadcastManager.getInstance(registrar.context());
-    final LaudyouAppServicePlugin plugin = new LaudyouAppServicePlugin();
-    localBroadcastManager.registerReceiver(plugin, new IntentFilter("id.flutter/background_service"));
+  @Override
+  public void onDetachedFromEngine(@NonNull FlutterPluginBinding flutterPluginBinding) {
+    this.mContext = null;
+    this.methodChannel.setMethodCallHandler(null);
+  }
 
-    final MethodChannel channel = new MethodChannel(registrar.messenger(), "id.flutter/background_service", JSONMethodCodec.INSTANCE);
-    channel.setMethodCallHandler(plugin);
-    plugin.channel = channel;
+  @Override
+  public void onAttachedToActivity(@NonNull ActivityPluginBinding activityPluginBinding) {
+    this.mActivity = activityPluginBinding.getActivity();
+  }
 
-    new LaudyouAppServicePlugin(registrar.context(), registrar.activity());
+  @Override
+  public void onDetachedFromActivityForConfigChanges() {
+    this.mActivity = null;
+  }
+
+  @Override
+  public void onReattachedToActivityForConfigChanges(@NonNull ActivityPluginBinding activityPluginBinding) {
+    this.mActivity = activityPluginBinding.getActivity();
+  }
+
+  @Override
+  public void onDetachedFromActivity() {
+    this.mActivity = null;
+  }
+
+  @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
+  @Override
+  public void onMethodCall(@NonNull MethodCall call, @NonNull Result result) {
+    try {
+      String prefMode;
+      JSONArray arguments;
+      switch (call.method) {
+        case "getPlatformVersion":
+          result.success("Android " + Build.VERSION.RELEASE);
+          break;
+        case "requestPermissions":
+          assert (call.arguments != null);
+          arguments = (JSONArray) call.arguments;
+          prefMode = (String) arguments.get(0);
+          if (prefMode == null) {
+            prefMode = "default";
+          }
+          if (askPermission(!isBubbleMode(prefMode))) {
+            result.success(true);
+          } else {
+            result.success(false);
+          }
+          break;
+        case "checkPermissions":
+          arguments = (JSONArray) call.arguments;
+          prefMode = (String) arguments.get(0);
+          if (prefMode == null) {
+            prefMode = "default";
+          }
+          if (checkPermission(!isBubbleMode(prefMode))) {
+            result.success(true);
+          } else {
+            result.success(false);
+          }
+          break;
+        case "configure":
+          JSONObject arg = (JSONObject) call.arguments;
+          long callbackHandle2 = arg.getLong("handle");
+          boolean isForeground = arg.getBoolean("is_foreground_mode");
+          boolean autoStartOnBoot = arg.getBoolean("auto_start_on_boot");
+
+          configure(mContext, callbackHandle2, isForeground, autoStartOnBoot);
+          if (autoStartOnBoot){
+            startBackgroundService();
+          }
+          result.success(true);
+          break;
+        case "sendData":
+          for (LaudyouBackgroundServicePlugin plugin : _instances) {
+            if (plugin.service != null) {
+              plugin.service.receiveData((JSONObject) call.arguments);
+              break;
+            }
+          }
+
+          result.success(true);
+          break;
+        case "showSystemWindow":
+          assert (call.arguments != null);
+          arguments = (JSONArray) call.arguments;
+          String title = (String) arguments.get(0);
+          String body = (String) arguments.get(1);
+          JSONObject paramObj = (JSONObject) arguments.get(2);
+          HashMap params = new Gson().fromJson(paramObj.toString(), HashMap.class);
+          prefMode = (String) arguments.get(3);
+          if (prefMode == null) {
+            prefMode = "default";
+          }
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && isBubbleMode(prefMode)) {
+            Log.d(TAG, "여기1");
+            if (checkPermission(false)) {
+              Log.d(TAG, "Going to show Bubble");
+              showBubble(title, body, params);
+            } else {
+              Toast.makeText(mContext, "Please enable bubbles", Toast.LENGTH_LONG).show();
+              result.success(false);
+            }
+          } else {
+            Log.d(TAG, "여기2");
+
+            if (checkPermission(true)) {
+              Log.d(TAG, "Going to show System Alert Window");
+              final Intent i = new Intent(mContext, WindowServiceNew.class);
+              i.putExtra(INTENT_EXTRA_PARAMS_MAP, params);
+              i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+              i.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+              //i.putExtra(INTENT_EXTRA_IS_UPDATE_WINDOW, false);
+              mContext.startService(i);
+            } else {
+              Log.d(TAG, "여기2-1");
+              Log.d(TAG, mContext.toString());
+              Toast.makeText(mContext, "Please give draw over other apps permission", Toast.LENGTH_LONG).show();
+              result.success(false);
+            }
+          }
+          result.success(true);
+          break;
+        case "updateSystemWindow":
+          assert (call.arguments != null);
+          JSONArray updateArguments = (JSONArray) call.arguments;
+          String updateTitle = (String) updateArguments.get(0);
+          String updateBody = (String) updateArguments.get(1);
+          HashMap<String, Object> updateParams = new Gson().fromJson(((JSONObject) updateArguments.get(2)).toString(), HashMap.class);
+          prefMode = (String) updateArguments.get(3);
+          if (prefMode == null) {
+            prefMode = "default";
+          }
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && isBubbleMode(prefMode)) {
+            if (checkPermission(false)) {
+              Log.d(TAG, "Going to update Bubble");
+              //NotificationHelper.getInstance(mContext).dismissNotification();
+              showBubble(updateTitle, updateBody, updateParams);
+            } else {
+              Toast.makeText(mContext, "Please enable bubbles", Toast.LENGTH_LONG).show();
+              result.success(false);
+            }
+          } else {
+            if (checkPermission(true)) {
+              Log.d(TAG, "Going to update System Alert Window");
+//              final Intent i = new Intent(mContext, WindowServiceNew.class);
+//              i.putExtra(INTENT_EXTRA_PARAMS_MAP, updateParams);
+//              i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+//              i.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+//              i.putExtra(INTENT_EXTRA_IS_UPDATE_WINDOW, true);
+//              mContext.startService(i);
+            } else {
+              Toast.makeText(mContext, "Please give draw over other apps permission", Toast.LENGTH_LONG).show();
+              result.success(false);
+            }
+          }
+          result.success(true);
+          break;
+        case "closeSystemWindow":
+          arguments = (JSONArray) call.arguments;
+          prefMode = (String) arguments.get(0);
+          if (prefMode == null) {
+            prefMode = "default";
+          }
+          if (checkPermission(!isBubbleMode(prefMode))) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && isBubbleMode(prefMode)) {
+              //NotificationHelper.getInstance(mContext).dismissNotification();
+            } else {
+//              final Intent i = new Intent(mContext, WindowServiceNew.class);
+//              i.putExtra(INTENT_EXTRA_IS_CLOSE_WINDOW, true);
+//              mContext.startService(i);
+            }
+            result.success(true);
+          }
+          break;
+        case "registerCallBackHandler":
+          try {
+            JSONArray callBackArguments = (JSONArray) call.arguments;
+            if (callBackArguments != null) {
+              long callbackHandle = Long.parseLong(String.valueOf(callBackArguments.get(0)));
+              long onClickHandle = Long.parseLong(String.valueOf(callBackArguments.get(1)));
+//              SharedPreferences preferences = mContext.getSharedPreferences(Constants.SHARED_PREF_SYSTEM_ALERT_WINDOW, 0);
+//              preferences.edit().putLong(Constants.CALLBACK_HANDLE_KEY, callbackHandle)
+//                      .putLong(Constants.CODE_CALLBACK_HANDLE_KEY, onClickHandle).apply();
+//              startCallBackHandler(mContext);
+              result.success(true);
+            } else {
+              Log.e(TAG, "Unable to register on click handler. Arguments are null");
+              result.success(false);
+            }
+          } catch (Exception ex) {
+            Log.e(TAG, "Exception in registerOnClickHandler " + ex.toString());
+            result.success(false);
+          }
+          break;
+        default:
+          result.notImplemented();
+      }
+    } catch (Exception ex) {
+      Log.e(TAG, "error", ex);
+      Log.e(TAG, ex.toString());
+    }
+
   }
 
   private static void configure(Context context, long callbackHandleId, boolean isForeground, boolean autoStartOnBoot) {
@@ -93,126 +322,156 @@ public class LaudyouAppServicePlugin extends BroadcastReceiver implements Flutte
             .apply();
   }
 
-  private void start() {
-    BackgroundService.enqueue(context);
-    boolean isForeground = BackgroundService.isForegroundService(context);
-    Intent intent = new Intent(context, BackgroundService.class);
+  private void startBackgroundService() {
+    BackgroundService.enqueue(mContext);
+    boolean isForeground = BackgroundService.isForegroundService(mContext);
+    Intent intent = new Intent(mContext, BackgroundService.class);
     if (isForeground){
-      ContextCompat.startForegroundService(context, intent);
+      ContextCompat.startForegroundService(mContext, intent);
     } else {
-      context.startService(intent);
+      mContext.startService(intent);
     }
   }
 
+  private boolean isBubbleMode(String prefMode) {
+    boolean isPreferOverlay = "overlay".equalsIgnoreCase(prefMode);
+    return Commons.isForceAndroidBubble(mContext) ||
+            (!isPreferOverlay && ("bubble".equalsIgnoreCase(prefMode) || Build.VERSION.SDK_INT >= Build.VERSION_CODES.R));
+  }
 
-  @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
-  @Override
-  public void onMethodCall(@NonNull MethodCall call, @NonNull Result result) {
-    String method = call.method;
-    JSONObject arg = (JSONObject) call.arguments;
+    /*public static void setPluginRegistrant(PluginRegistry.PluginRegistrantCallback callback) {
+        sPluginRegistrantCallback = callback;
+    }*/
 
-    Log.d(TAG, "onMethodCall:"+ method);
-
-    try {
-      if (method.equals("getPlatformVersion")) {
-        result.success("Android " + android.os.Build.VERSION.RELEASE + arg.getString("b"));
+  public void startCallBackHandler(Context context) {
+    /*
+    SharedPreferences preferences = context.getSharedPreferences(Constants.SHARED_PREF_SYSTEM_ALERT_WINDOW, 0);
+    long callBackHandle = preferences.getLong(Constants.CALLBACK_HANDLE_KEY, -1);
+    Log.d(TAG, "onClickCallBackHandle " + callBackHandle);
+    if (callBackHandle != -1) {
+      FlutterCallbackInformation callback = FlutterCallbackInformation.lookupCallbackInformation(callBackHandle);
+      if (callback == null) {
+        Log.e(TAG, "callback handle not found");
         return;
       }
-
-      if (method.equals("requestPermissions")) {
-        String prefMode = arg.getString("prefMode");
-        if (prefMode == null) {
-          prefMode = "default";
-        }
-        if (askPermission(!isBubbleMode(prefMode))) {
-          result.success(true);
-        } else {
-          result.success(false);
-        }
-        return;
-      }
-
-      if (method.equals("checkPermissions")) {
-        String prefMode = arg.getString("prefMode");
-        if (prefMode == null) {
-          prefMode = "default";
-        }
-        if (checkPermission(!isBubbleMode(prefMode))) {
-          result.success(true);
-        } else {
-          result.success(false);
-        }
-        return;
-      }
-
-      if ("configure".equals(method)) {
-        long callbackHandle = arg.getLong("handle");
-        boolean isForeground = arg.getBoolean("is_foreground_mode");
-        boolean autoStartOnBoot = arg.getBoolean("auto_start_on_boot");
-
-        configure(context, callbackHandle, isForeground, autoStartOnBoot);
-        if (autoStartOnBoot){
-          start();
-        }
-
-        result.success(true);
-        return;
-      }
-
-      if ("start".equals(method)){
-        start();
-        result.success(true);
-        return;
-      }
-
-      if (method.equalsIgnoreCase("sendData")) {
-        for (LaudyouAppServicePlugin plugin : _instances) {
-          if (plugin.service != null) {
-            plugin.service.receiveData((JSONObject) call.arguments);
-            break;
-          }
-        }
-
-        result.success(true);
-        return;
-      }
-
-      if (method.equalsIgnoreCase("isServiceRunning")) {
-        ActivityManager manager = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
-        for (ActivityManager.RunningServiceInfo service : manager.getRunningServices(Integer.MAX_VALUE)) {
-          if (BackgroundService.class.getName().equals(service.service.getClassName())) {
-            result.success(true);
-            return;
-          }
-        }
-        result.success(false);
-        return;
-      }
-
-      result.notImplemented();
-    }catch (Exception e){
-      result.error("100", "Failed read arguments", null);
+      FlutterEngine backgroundEngine = new FlutterEngine(context);
+      //backgroundEngine.getServiceControlSurface().attachToService(new WindowServiceNew(), null, false);
+      backgroundChannel = new MethodChannel(backgroundEngine.getDartExecutor().getBinaryMessenger(), Constants.BACKGROUND_CHANNEL, JSONMethodCodec.INSTANCE);
+      sIsIsolateRunning.set(true);
+      DartExecutor.DartCallback dartCallback = new DartExecutor.DartCallback(context.getAssets(), FlutterInjector.instance().flutterLoader().findAppBundlePath(), callback);
+      backgroundEngine.getDartExecutor().executeDartCallback(dartCallback);
     }
+
+     */
+  }
+
+  public void invokeCallBack(Context context, String type, Object params) {
+    List<Object> argumentsList = new ArrayList<>();
+    Log.v(TAG, "invoking callback for tag " + params);
+        /*try {
+            argumentsList.add(type);
+            argumentsList.add(params);
+            Log.v(TAG, "invoking callback for tag "+params);
+            methodChannel.invokeMethod("callBack", argumentsList);
+        } catch (Exception ex) {
+            Log.e(TAG, "invokeCallBack Exception : " + ex.toString());
+            SharedPreferences preferences = context.getSharedPreferences(Constants.SHARED_PREF_SYSTEM_ALERT_WINDOW, 0);
+            long codeCallBackHandle = preferences.getLong(Constants.CODE_CALLBACK_HANDLE_KEY, -1);
+            Log.i(TAG, "codeCallBackHandle " + codeCallBackHandle);
+            if (codeCallBackHandle == -1) {
+                Log.e(TAG, "invokeCallBack failed, as codeCallBackHandle is null");
+            } else {
+                argumentsList.clear();
+                argumentsList.add(codeCallBackHandle);
+                argumentsList.add(type);
+                argumentsList.add(params);
+                backgroundChannel.invokeMethod("callBack", argumentsList);
+            }
+        }*/
+
+    /*
+    SharedPreferences preferences = context.getSharedPreferences(Constants.SHARED_PREF_SYSTEM_ALERT_WINDOW, 0);
+    long codeCallBackHandle = preferences.getLong(Constants.CODE_CALLBACK_HANDLE_KEY, -1);
+    if (codeCallBackHandle == -1) {
+      Log.e(TAG, "invokeCallBack failed, as codeCallBackHandle is null");
+    } else {
+      argumentsList.clear();
+      argumentsList.add(codeCallBackHandle);
+      argumentsList.add(type);
+      argumentsList.add(params);
+      if (sIsIsolateRunning.get()) {
+        try {
+          Log.v(TAG, "Invoking on method channel");
+          int[] retries = {2};
+          invokeCallBackToFlutter(backgroundChannel, "callBack", argumentsList, retries);
+          //backgroundChannel.invokeMethod("callBack", argumentsList);
+        } catch (Exception ex) {
+          Log.e(TAG, "Exception in invoking callback " + ex.toString());
+        }
+      } else {
+        Log.e(TAG, "invokeCallBack failed, as isolate is not running");
+      }
+    }
+
+     */
+  }
+
+  private void invokeCallBackToFlutter(final MethodChannel channel, final String method, final List<Object> arguments, final int[] retries) {
+    channel.invokeMethod(method, arguments, new MethodChannel.Result() {
+      @Override
+      public void success(Object o) {
+        Log.i(TAG, "Invoke call back success");
+      }
+
+      @Override
+      public void error(String s, String s1, Object o) {
+        Log.e(TAG, "Error " + s + s1);
+      }
+
+      @Override
+      public void notImplemented() {
+        //To fix the dart initialization delay.
+        if (retries[0] > 0) {
+          Log.d(TAG, "Not Implemented method " + method + ". Trying again to check if it works");
+          invokeCallBackToFlutter(channel, method, arguments, retries);
+        } else {
+          Log.e(TAG, "Not Implemented method " + method);
+        }
+        retries[0]--;
+      }
+    });
+  }
+
+  @TargetApi(Build.VERSION_CODES.M)
+  @Override
+  protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+    super.onActivityResult(requestCode, resultCode, data);
+    if (requestCode == ACTION_MANAGE_OVERLAY_PERMISSION_REQUEST_CODE) {
+      if (!Settings.canDrawOverlays(mContext)) {
+        Log.e(TAG, "System Alert Window will not work without 'Can Draw Over Other Apps' permission");
+        Toast.makeText(mContext, "System Alert Window will not work without 'Can Draw Over Other Apps' permission", Toast.LENGTH_LONG).show();
+      }
+    }
+
   }
 
   @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
   public boolean askPermission(boolean isOverlay) {
-    if (!isOverlay && (Commons.isForceAndroidBubble(context) || Build.VERSION.SDK_INT > Build.VERSION_CODES.Q)) {
-      //return NotificationHelper.getInstance(mContext).areBubblesAllowed();
-      return true;
+    if (!isOverlay && (Commons.isForceAndroidBubble(mContext) || Build.VERSION.SDK_INT > Build.VERSION_CODES.Q)) {
+      return NotificationHelper.getInstance(mContext).areBubblesAllowed();
     } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-      if (!Settings.canDrawOverlays(context)) {
+      if (!Settings.canDrawOverlays(mContext)) {
         Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                Uri.parse("package:" + context.getPackageName()));
+                Uri.parse("package:" + mContext.getPackageName()));
         if (mActivity == null) {
-          if (context != null) {
+          if (mContext != null) {
             intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            context.startActivity(intent);
-            Toast.makeText(context, "Please grant, Can Draw Over Other Apps permission.", Toast.LENGTH_SHORT).show();
+            mContext.startActivity(intent);
+            Toast.makeText(mContext, "Please grant, Can Draw Over Other Apps permission.", Toast.LENGTH_SHORT).show();
             Log.e(TAG, "Can't detect the permission change, as the mActivity is null");
           } else {
             Log.e(TAG, "'Can Draw Over Other Apps' permission is not granted");
-            Toast.makeText(context, "Can Draw Over Other Apps permission is required. Please grant it from the app settings", Toast.LENGTH_LONG).show();
+            Toast.makeText(mContext, "Can Draw Over Other Apps permission is required. Please grant it from the app settings", Toast.LENGTH_LONG).show();
           }
         } else {
           mActivity.startActivityForResult(intent, ACTION_MANAGE_OVERLAY_PERMISSION_REQUEST_CODE);
@@ -226,58 +485,20 @@ public class LaudyouAppServicePlugin extends BroadcastReceiver implements Flutte
 
   @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
   public boolean checkPermission(boolean isOverlay) {
-    if (!isOverlay && (Commons.isForceAndroidBubble(context) || Build.VERSION.SDK_INT > Build.VERSION_CODES.Q)) {
-      //return NotificationHelper.getInstance(mContext).areBubblesAllowed();
-      return true;
+    if (!isOverlay && (Commons.isForceAndroidBubble(mContext) || Build.VERSION.SDK_INT > Build.VERSION_CODES.Q)) {
+      return NotificationHelper.getInstance(mContext).areBubblesAllowed();
     } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-      return Settings.canDrawOverlays(context);
+      return Settings.canDrawOverlays(mContext);
     }
     return false;
   }
 
-  private boolean isBubbleMode(String prefMode) {
-    boolean isPreferOverlay = "overlay".equalsIgnoreCase(prefMode);
-    return Commons.isForceAndroidBubble(context) ||
-            (!isPreferOverlay && ("bubble".equalsIgnoreCase(prefMode) || Build.VERSION.SDK_INT >= Build.VERSION_CODES.R));
+  @RequiresApi(api = Build.VERSION_CODES.Q)
+  private void showBubble(String title, String body, HashMap params) {
+    Icon icon = Icon.createWithResource(mContext, R.drawable.ic_bg_service_small);
+    NotificationHelper notificationHelper = NotificationHelper.getInstance(mContext);
+    notificationHelper.showNotification(icon, title, body, params);
   }
 
-  @Override
-  public void onDetachedFromEngine(@NonNull FlutterPluginBinding binding) {
-    channel.setMethodCallHandler(null);
-
-    LocalBroadcastManager localBroadcastManager = LocalBroadcastManager.getInstance(this.context);
-    localBroadcastManager.unregisterReceiver(this);
-  }
-
-  @Override
-  public void onReceive(Context context, Intent intent) {
-    if (intent.getAction() == null) return;
-
-    if (intent.getAction().equalsIgnoreCase("id.flutter/background_service")){
-      String data = intent.getStringExtra("data");
-      try {
-        JSONObject jData = new JSONObject(data);
-        if (channel != null){
-          channel.invokeMethod("onReceiveData", jData);
-        }
-      }catch (JSONException e){
-        e.printStackTrace();
-      } catch (Exception e){
-        e.printStackTrace();
-      }
-    }
-  }
-
-  @Override
-  public void onAttachedToService(@NonNull ServicePluginBinding binding) {
-    Log.d(TAG, "onAttachedToService");
-
-    this.service = (BackgroundService) binding.getService();
-  }
-
-  @Override
-  public void onDetachedFromService() {
-    this.service = null;
-    Log.d(TAG, "onDetachedFromService");
-  }
 }
+

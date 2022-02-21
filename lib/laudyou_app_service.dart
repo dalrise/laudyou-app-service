@@ -5,6 +5,8 @@ import 'dart:ui';
 import 'package:flutter/services.dart';
 import 'package:laudyou_app_service/utils/commons.dart';
 
+import 'utils/constants.dart';
+
 class IosConfiguration {
   /// 이 메소드는 앱이 포그라운드에 있을 때 실행됩니다.
   final Function onForeground;
@@ -55,10 +57,10 @@ class LaudyouAppService {
   bool _isMainChannel = false;
 
   static const MethodChannel _backgroundChannel =
-      MethodChannel('id.flutter/background_service_bg', JSONMethodCodec());
+      MethodChannel(Constants.BACKGROUND_CHANNEL, JSONMethodCodec());
 
   static const MethodChannel _mainChannel =
-      MethodChannel('id.flutter/background_service', JSONMethodCodec());
+      MethodChannel(Constants.CHANNEL, JSONMethodCodec());
 
   static final LaudyouAppService _instance = LaudyouAppService._internal()
     .._setupBackground();
@@ -228,13 +230,35 @@ class LaudyouAppService {
 
   static Future<bool?> checkPermissions(
       {SystemWindowPrefMode prefMode = SystemWindowPrefMode.DEFAULT}) async {
-    return await _mainChannel.invokeMethod('checkPermissions',
-        {"prefMode": Commons.getSystemWindowPrefMode(prefMode)});
+    // return await _mainChannel.invokeMethod('checkPermissions',
+    //     {"prefMode": Commons.getSystemWindowPrefMode(prefMode)});
+    return await _mainChannel.invokeMethod(
+        'checkPermissions', [Commons.getSystemWindowPrefMode(prefMode)]);
   }
 
   static Future<bool?> requestPermissions(
       {SystemWindowPrefMode prefMode = SystemWindowPrefMode.DEFAULT}) async {
-    return await _mainChannel.invokeMethod('requestPermissions',
-        {"prefMode": Commons.getSystemWindowPrefMode(prefMode)});
+    // return await _mainChannel.invokeMethod('requestPermissions',
+    //     {"prefMode": Commons.getSystemWindowPrefMode(prefMode)});
+
+    return await _mainChannel.invokeMethod(
+        'requestPermissions', [Commons.getSystemWindowPrefMode(prefMode)]);
+  }
+
+  static Future<bool?> showSystemWindow({
+    String notificationTitle = "Title",
+    String notificationBody = "Body",
+    SystemWindowPrefMode prefMode = SystemWindowPrefMode.DEFAULT,
+  }) async {
+    final Map<String, dynamic> params = <String, dynamic>{
+      'header': {"text": "텍스트"},
+      'body': 'body',
+    };
+    return await _mainChannel.invokeMethod('showSystemWindow', [
+      notificationTitle,
+      notificationBody,
+      params,
+      Commons.getSystemWindowPrefMode(prefMode)
+    ]);
   }
 }

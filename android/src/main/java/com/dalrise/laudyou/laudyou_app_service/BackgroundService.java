@@ -20,6 +20,7 @@ import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.WindowManager;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 
 import androidx.annotation.NonNull;
 import androidx.core.app.AlarmManagerCompat;
@@ -122,7 +123,7 @@ public class BackgroundService extends Service implements MethodChannel.MethodCa
         createNotificationChannel();
         notificationContent = "Preparing";
         updateNotificationInfo();
-        createLockScreen();
+        //createLockScreen();
     }
 
 
@@ -152,7 +153,7 @@ public class BackgroundService extends Service implements MethodChannel.MethodCa
         Context mContext = getApplicationContext();
         PackageManager pkgm = mContext.getPackageManager();
         LayoutInflater inflater = LayoutInflater.from(this);
-        LinearLayout ll = (LinearLayout) inflater.inflate(R.layout.activity_lock_screen, null);
+        ScrollView ll = (ScrollView) inflater.inflate(R.layout.activity_lock_screen, null);
 
         int LAYOUT_FLAG;
         if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -261,6 +262,7 @@ public class BackgroundService extends Service implements MethodChannel.MethodCa
     }
 
     public void receiveData(JSONObject data) {
+        Log.d(TAG, "receiveData:"+ data.toString());
         if (methodChannel != null) {
             try {
                 methodChannel.invokeMethod("onReceiveData", data);

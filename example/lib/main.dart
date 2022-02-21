@@ -61,7 +61,7 @@ void onStart() {
 
   // bring to foreground
   service.setForegroundMode(true);
-  Timer.periodic(const Duration(seconds: 1), (timer) async {
+  Timer.periodic(const Duration(seconds: 10), (timer) async {
     if (!(await service.isServiceRunning())) timer.cancel();
     service.setNotificationInfo(
       title: "LaudYou App Service",
@@ -100,6 +100,8 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> {
   String _platformVersion = 'Unknown';
   String text = "Stop Service";
+  SystemWindowPrefMode prefMode = SystemWindowPrefMode.OVERLAY;
+
   @override
   void initState() {
     super.initState();
@@ -139,37 +141,47 @@ class _MyAppState extends State<MyApp> {
           child: Column(
             children: [
               Text('Running on: $_platformVersion\n'),
-              StreamBuilder<Map<String, dynamic>?>(
-                stream: LaudyouAppService().onDataReceived,
-                builder: (context, snapshot) {
-                  if (!snapshot.hasData) {
-                    return const Center(
-                      child: CircularProgressIndicator(),
-                    );
-                  }
-
-                  final data = snapshot.data!;
-                  String? device = data["device"];
-                  DateTime? date = DateTime.tryParse(data["current_date"]);
-                  return Column(
-                    children: [
-                      Text(device ?? 'Unknown'),
-                      Text(date.toString()),
-                    ],
-                  );
-                },
-              ),
+              // StreamBuilder<Map<String, dynamic>?>(
+              //   stream: LaudyouAppService().onDataReceived,
+              //   builder: (context, snapshot) {
+              //     if (!snapshot.hasData) {
+              //       return const Center(
+              //         child: CircularProgressIndicator(),
+              //       );
+              //     }
+              //
+              //     final data = snapshot.data!;
+              //     String? device = data["device"];
+              //     DateTime? date = DateTime.tryParse(data["current_date"]);
+              //     return Column(
+              //       children: [
+              //         Text(device ?? 'Unknown'),
+              //         Text(date.toString()),
+              //       ],
+              //     );
+              //   },
+              // ),
               ElevatedButton(
                 child: const Text("Check Permission"),
                 onPressed: () async {
-                  final result = await LaudyouAppService.checkPermissions();
+                  final result = await LaudyouAppService.checkPermissions(
+                      prefMode: prefMode);
                   print(result);
                 },
               ),
               ElevatedButton(
                 child: const Text("Request Permission"),
                 onPressed: () async {
-                  final result = await LaudyouAppService.requestPermissions();
+                  final result = await LaudyouAppService.requestPermissions(
+                      prefMode: prefMode);
+                  print(result);
+                },
+              ),
+              ElevatedButton(
+                child: const Text("showSystemWindow"),
+                onPressed: () async {
+                  final result = await LaudyouAppService.showSystemWindow(
+                      prefMode: prefMode);
                   print(result);
                 },
               ),
