@@ -6,6 +6,8 @@ import android.content.Intent;
 
 import androidx.annotation.NonNull;
 
+import com.dalrise.laudyou.laudyou_app_service.services.BackgroundService;
+
 import io.flutter.embedding.engine.plugins.FlutterPlugin;
 import io.flutter.embedding.engine.plugins.service.ServiceAware;
 import io.flutter.embedding.engine.plugins.service.ServicePluginBinding;

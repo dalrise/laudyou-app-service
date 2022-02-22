@@ -6,6 +6,8 @@ import android.content.Intent;
 
 import androidx.core.content.ContextCompat;
 
+import com.dalrise.laudyou.laudyou_app_service.services.BackgroundService;
+
 public class WatchdogReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent) {

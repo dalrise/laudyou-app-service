@@ -1,6 +1,7 @@
-package com.dalrise.laudyou.laudyou_app_service;
+package com.dalrise.laudyou.laudyou_app_service.services;
 
 import static android.os.Build.VERSION.SDK_INT;
+import static com.dalrise.laudyou.laudyou_app_service.utils.Constants.BACKGROUND_CHANNEL;
 
 import android.app.AlarmManager;
 import android.app.NotificationChannel;
@@ -10,22 +11,19 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.content.pm.PackageManager;
-import android.graphics.PixelFormat;
 import android.os.Build;
 import android.os.IBinder;
 import android.os.PowerManager;
 import android.os.PowerManager.WakeLock;
 import android.util.Log;
-import android.view.LayoutInflater;
-import android.view.WindowManager;
-import android.widget.LinearLayout;
-import android.widget.ScrollView;
 
 import androidx.annotation.NonNull;
 import androidx.core.app.AlarmManagerCompat;
 import androidx.core.app.NotificationCompat;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
+
+import com.dalrise.laudyou.laudyou_app_service.R;
+import com.dalrise.laudyou.laudyou_app_service.WatchdogReceiver;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -34,15 +32,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.lang.UnsatisfiedLinkError;
 
 import io.flutter.FlutterInjector;
-import io.flutter.app.FlutterApplication;
 import io.flutter.embedding.engine.FlutterEngine;
 import io.flutter.embedding.engine.dart.DartExecutor;
-import io.flutter.embedding.engine.loader.FlutterLoader;
 import io.flutter.plugin.common.JSONMethodCodec;
 import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel;
 import io.flutter.view.FlutterCallbackInformation;
-import io.flutter.view.FlutterMain;
 
 public class BackgroundService extends Service implements MethodChannel.MethodCallHandler {
     private static final String TAG = "BackgroundService";
@@ -149,32 +144,6 @@ public class BackgroundService extends Service implements MethodChannel.MethodCa
         super.onDestroy();
     }
 
-    private void createLockScreen() {
-        Context mContext = getApplicationContext();
-        PackageManager pkgm = mContext.getPackageManager();
-        LayoutInflater inflater = LayoutInflater.from(this);
-        ScrollView ll = (ScrollView) inflater.inflate(R.layout.activity_lock_screen, null);
-
-        int LAYOUT_FLAG;
-        if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            LAYOUT_FLAG = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
-        }else{
-            LAYOUT_FLAG = WindowManager.LayoutParams.TYPE_PHONE;
-        }
-
-        //최상위 윈도우에 넣기 위한 설정
-        WindowManager.LayoutParams mParams = new WindowManager.LayoutParams(
-                WindowManager.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.MATCH_PARENT,
-                LAYOUT_FLAG,					//항상 최 상위에 있게. status bar 밑에 있음. 터치 이벤트 받을 수 있음.
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,		//이 속성을 안주면 터치 & 키 이벤트도 먹게 된다.
-                //포커스를 안줘서 자기 영역 밖터치는 인식 안하고 키이벤트를 사용하지 않게 설정
-                PixelFormat.TRANSLUCENT);										//투명
-
-        WindowManager mWindowManager = (WindowManager) getSystemService(WINDOW_SERVICE);	//윈도우 매니저 불러옴.
-        mWindowManager.addView(ll, mParams);
-
-    }
 
     private void createNotificationChannel() {
         if (SDK_INT >= Build.VERSION_CODES.O) {
@@ -248,7 +217,7 @@ public class BackgroundService extends Service implements MethodChannel.MethodCa
             backgroundEngine = new FlutterEngine(this);
             backgroundEngine.getServiceControlSurface().attachToService(BackgroundService.this, null, isForegroundService(this));
 
-            methodChannel = new MethodChannel(backgroundEngine.getDartExecutor().getBinaryMessenger(), "id.flutter/background_service_bg", JSONMethodCodec.INSTANCE);
+            methodChannel = new MethodChannel(backgroundEngine.getDartExecutor().getBinaryMessenger(), BACKGROUND_CHANNEL, JSONMethodCodec.INSTANCE);
             methodChannel.setMethodCallHandler(this);
 
             dartCallback = new DartExecutor.DartCallback(getAssets(), FlutterInjector.instance().flutterLoader().findAppBundlePath(), callback);

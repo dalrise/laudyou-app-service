@@ -9,6 +9,8 @@ import androidx.core.content.ContextCompat;
 
 import static android.content.Context.MODE_PRIVATE;
 
+import com.dalrise.laudyou.laudyou_app_service.services.BackgroundService;
+
 public class BootReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent) {

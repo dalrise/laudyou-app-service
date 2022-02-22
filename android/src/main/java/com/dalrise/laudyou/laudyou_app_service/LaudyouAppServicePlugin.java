@@ -18,8 +18,8 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
 import androidx.core.content.ContextCompat;
-import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
+import com.dalrise.laudyou.laudyou_app_service.services.BackgroundService;
 import com.dalrise.laudyou.laudyou_app_service.services.WindowServiceNew;
 import com.dalrise.laudyou.laudyou_app_service.utils.Commons;
 import com.dalrise.laudyou.laudyou_app_service.utils.NotificationHelper;
@@ -32,26 +32,24 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
-import io.flutter.FlutterInjector;
+
 import io.flutter.embedding.engine.FlutterEngine;
 import io.flutter.embedding.engine.FlutterEngineCache;
 import io.flutter.embedding.engine.dart.DartExecutor;
 import io.flutter.embedding.engine.plugins.FlutterPlugin;
 import io.flutter.embedding.engine.plugins.activity.ActivityAware;
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding;
-import io.flutter.embedding.engine.plugins.service.ServicePluginBinding;
 import io.flutter.plugin.common.JSONMethodCodec;
 import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel;
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler;
 import io.flutter.plugin.common.MethodChannel.Result;
 import io.flutter.plugin.common.PluginRegistry.Registrar;
-import io.flutter.view.FlutterCallbackInformation;
 
 /** LaudyouAppServicePlugin */
 public class LaudyouAppServicePlugin extends Activity implements FlutterPlugin, ActivityAware, MethodCallHandler {
 
-  private static final List<LaudyouBackgroundServicePlugin> _instances = new ArrayList<>();
+  //private static final List<LaudyouBackgroundServicePlugin> _instances = new ArrayList<>();
 
   private final String flutterEngineId = "system_alert_window_engine";
   private Context mContext;
@@ -65,7 +63,7 @@ public class LaudyouAppServicePlugin extends Activity implements FlutterPlugin, 
 
 
   public LaudyouAppServicePlugin() {
-    _instances.add(new LaudyouBackgroundServicePlugin());
+    //_instances.add(new LaudyouBackgroundServicePlugin());
   }
 
   private LaudyouAppServicePlugin(Context context, Activity activity, MethodChannel newMethodChannel) {
@@ -140,6 +138,7 @@ public class LaudyouAppServicePlugin extends Activity implements FlutterPlugin, 
     try {
       String prefMode;
       JSONArray arguments;
+      Log.d(TAG, "call.method:" + call.method);
       switch (call.method) {
         case "getPlatformVersion":
           result.success("Android " + Build.VERSION.RELEASE);
@@ -182,12 +181,12 @@ public class LaudyouAppServicePlugin extends Activity implements FlutterPlugin, 
           result.success(true);
           break;
         case "sendData":
-          for (LaudyouBackgroundServicePlugin plugin : _instances) {
-            if (plugin.service != null) {
-              plugin.service.receiveData((JSONObject) call.arguments);
-              break;
-            }
-          }
+//          for (LaudyouBackgroundServicePlugin plugin : _instances) {
+//            if (plugin.service != null) {
+//              plugin.service.receiveData((JSONObject) call.arguments);
+//              break;
+//            }
+//          }
 
           result.success(true);
           break;
@@ -326,6 +325,7 @@ public class LaudyouAppServicePlugin extends Activity implements FlutterPlugin, 
     BackgroundService.enqueue(mContext);
     boolean isForeground = BackgroundService.isForegroundService(mContext);
     Intent intent = new Intent(mContext, BackgroundService.class);
+    Log.d(TAG, "startBackgroundService:" + isForeground);
     if (isForeground){
       ContextCompat.startForegroundService(mContext, intent);
     } else {
