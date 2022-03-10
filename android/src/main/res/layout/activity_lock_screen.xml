@@ -1,23 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
-
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    tools:context=".BubbleActivity">
-
+    android:orientation="vertical">
     <LinearLayout
-        android:id="@+id/bubbleLayout"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="0dp"
+        android:layout_weight="10"
+        android:id="@+id/draw_linear_layout"
         android:orientation="vertical">
-        <TextView
-            android:id="@+id/textView"
+        <Button
+            android:id="@+id/buttonClose"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:text="잠금 화면" />
+            android:layout_height="60dp"
+            android:text="Close" />
+        <Button
+            android:id="@+id/buttonClassify"
+            android:layout_width="match_parent"
+            android:layout_height="60dp"
+            android:text="Classify" />
     </LinearLayout>
 
-</ScrollView>
+
+</LinearLayout>
